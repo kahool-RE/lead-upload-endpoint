@@ -457,21 +457,27 @@ class LeadUploadService:
         return None
 
     def _persist_rows(self, rows: list[dict[str, Any]]) -> tuple[int, int, int]:
-        if self.db is None or Lead is None:
-            return len(rows), 0, 0
+        if self.db is None:
+            raise HTTPException(
+                status_code=501,
+                detail='Database session is not configured. Use dry_run=true or wire get_db() before committing uploads.',
+            )
+        if Lead is None:
+            raise HTTPException(status_code=500, detail='Lead model is not available for upload persistence.')
 
         inserted = 0
         updated = 0
         skipped_duplicates = 0
 
         for row in rows:
-            existing = self.db.query(Lead).filter(Lead.dedupe_key == row['dedupe_key']).one_or_none()
+            lead_values = self._to_lead_values(row)
+            existing = self._find_existing_lead(lead_values)
             if existing is None:
-                self.db.add(Lead(**row))
+                self.db.add(Lead(**lead_values))
                 inserted += 1
                 continue
             changed = False
-            for key, value in row.items():
+            for key, value in lead_values.items():
                 current = getattr(existing, key, None)
                 if value not in (None, '', []) and current != value:
                     setattr(existing, key, value)
@@ -483,6 +489,37 @@ class LeadUploadService:
 
         self.db.commit()
         return inserted, updated, skipped_duplicates
+
+    def _find_existing_lead(self, lead_values: dict[str, Any]) -> Any | None:
+        return (
+            self.db.query(Lead)
+            .filter(
+                Lead.address == lead_values['address'],
+                Lead.city == lead_values.get('city'),
+                Lead.state == lead_values.get('state'),
+                Lead.zip == lead_values.get('zip'),
+            )
+            .one_or_none()
+        )
+
+    def _to_lead_values(self, row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            'address': row['address'],
+            'city': row.get('city'),
+            'state': row.get('state'),
+            'zip': row.get('zip_code'),
+            'status': row.get('status') or 'unknown',
+            'price': row.get('price'),
+            'property_type': row.get('property_type'),
+            'dom': row.get('days_on_market'),
+            'phone': row.get('best_phone'),
+            'email': row.get('best_email'),
+            'owner_name': row.get('owner_name'),
+            'owner_occupied': row.get('owner_occupied') is True,
+            'score': row.get('score') or 0,
+            'outreach_status': 'new',
+            'do_not_contact': False,
+        }
 
     def _build_dedupe_key(self, listing_id: str | None, mls_number: str | None, address: str | None, city: str | None, state: str | None, zip_code: str | None) -> str:
         base = '|'.join([
