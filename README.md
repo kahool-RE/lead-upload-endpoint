@@ -66,3 +66,95 @@ Example:
 ```bash
 curl -X POST "http://localhost:8000/api/v1/leads/upload?dry_run=true&target_price_min=700000&target_price_max=1200000"   -F "file=@Sample listings.xls"
 ```
+# Lead + Message Event Schema
+
+This package gives you the minimum viable database layer for the expired-listing system.
+
+## Tables
+
+### `leads`
+Core lead record used by upload, scoring, filtering, and outreach.
+
+Fields:
+- `id`
+- `address`
+- `city`
+- `state`
+- `zip`
+- `status`
+- `price`
+- `property_type`
+- `dom`
+- `phone`
+- `email`
+- `owner_name`
+- `owner_occupied`
+- `score`
+- `outreach_status`
+- `do_not_contact`
+- `created_at`
+- `updated_at`
+
+### `message_events`
+Append-only event log for outbound and inbound communication.
+
+Fields:
+- `id`
+- `lead_id`
+- `channel`
+- `direction`
+- `message_body`
+- `sent_at`
+- `received_at`
+- `status`
+
+## Recommended values
+
+### `outreach_status`
+- `new`
+- `queued`
+- `contacted`
+- `replied`
+- `qualified`
+- `booked`
+- `dead`
+- `do_not_contact`
+
+### `channel`
+- `sms`
+- `email`
+
+### `direction`
+- `outbound`
+- `inbound`
+
+### `message_events.status`
+- `queued`
+- `sent`
+- `delivered`
+- `failed`
+- `received`
+
+## Why this is enough for MVP
+
+This schema supports:
+- lead upload
+- hard filtering
+- rules-based scoring
+- outbound SMS/email logging
+- inbound reply logging
+- conversation history per lead
+- stop-contact logic with `do_not_contact`
+
+## Next schema upgrades
+
+Do not add these until the basic send/reply loop works:
+- `external_message_id`
+- `thread_id`
+- `error_code`
+- `error_message`
+- `agent_id`
+- `campaign_id`
+- `last_contacted_at`
+- `next_follow_up_at`
+- `dedupe_key`
